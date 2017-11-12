@@ -32,7 +32,6 @@ class ReleaseTask extends GradleBuild {
 
         tasks = [
                 'updateToReleaseVersion',
-                'uploadArchives',
                 'pushToRemote',
                 'updateToNextVersion',
         ]

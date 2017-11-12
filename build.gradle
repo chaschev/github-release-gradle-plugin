@@ -1,19 +1,18 @@
 apply plugin: 'groovy'
 apply plugin: 'idea'
-apply plugin: 'nexus'
+apply plugin: 'com.bmuschko.nexus'
 
 group = 'com.antwerkz.github'
 version = '1.2.0-SNAPSHOT'
 
 buildscript {
   repositories {
-    mavenLocal()
     mavenCentral()
     jcenter()
   }
 
   dependencies {
-    classpath 'org.gradle.api.plugins:gradle-nexus-plugin:0.5'
+    classpath 'com.bmuschko:gradle-nexus-plugin:2.3.1'
   }
 }
 
@@ -27,13 +26,14 @@ dependencies {
   compile('org.codehaus.groovy.modules.http-builder:http-builder:0.6') {
     exclude group: 'org.codehaus.groovy', module: 'groovy'
   }
-  runtime 'org.gradle.api.plugins:gradle-nexus-plugin:0.5'
-  compile 'org.kohsuke:github-api:1.47'
-  compile 'org.eclipse.jgit:org.eclipse.jgit:3.2.0.201312181205-r'
+  compile('org.kohsuke:github-api:1.90') {
+    exclude group: 'com.infradna.tool'
+  }
+  compile 'org.eclipse.jgit:org.eclipse.jgit:4.9.0.201710071750-r'
 }
 
 task wrapper(type: Wrapper) {
-  gradleVersion = "1.8"
+  gradleVersion = "4.0.0"
 }
 
 project.ext.mavenDeployers = []
@@ -49,11 +49,17 @@ install {
 uploadArchives {
   repositories {
     mavenDeployer {
-      beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+      beforeDeployment {
+        MavenDeployment deployment -> signing.signPom(deployment)
+      }
     }
   }
+
   project.mavenDeployers << repositories.mavenDeployer {
-    beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+    beforeDeployment {
+      MavenDeployment deployment -> signing.signPom(deployment)
+    }
+
     def nexusCredentials = [
             userName: project.properties.nexusUsername,
             password: project.properties.nexusPassword
@@ -62,6 +68,7 @@ uploadArchives {
     snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots') {
       authentication(nexusCredentials)
     }
+
     repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2/') {
       authentication(nexusCredentials)
     }
@@ -76,12 +83,13 @@ modifyPom {
   project {
     name 'Github Gradle Release Plugins'
     description = 'Set of plugins that can help you to release your project on Github'
-    url 'http://github.com/evanchooly/github-release-gradle-plugin'
+    url 'http://github.com/chaschev/github-release-gradle-plugin'
     version = project.version
+
     scm {
-      url 'git@github.com:evanchooly/github-release-gradle-plugin.git'
-      connection 'scm:git:git@github.com:evanchooly/github-release-gradle-plugin.git'
-      developerConnection 'scm:git:git@github.com:evanchooly/github-release-gradle-plugin.git'
+      url 'git@github.com:chaschev/github-release-gradle-plugin.git'
+      connection 'scm:git:git@github.com:chaschev/github-release-gradle-plugin.git'
+      developerConnection 'scm:git:git@github.com:chaschev/github-release-gradle-plugin.git'
     }
 
     licenses {
@@ -91,6 +99,7 @@ modifyPom {
         distribution 'repo'
       }
     }
+
     developers {
       developer {
         id 'trnl'
@@ -102,6 +111,12 @@ modifyPom {
         name 'Justin Lee'
         url = 'http://github.com/evanchooly'
       }
+      developer {
+        id 'chaschev'
+        name 'Andrey Chaschev'
+        url = 'http://github.com/chaschev'
+      }
+
     }
   }
 }
