@@ -2,6 +2,7 @@ package org.gradle.api.plugins.release
 
 import org.eclipse.jgit.api.Git
 import org.gradle.StartParameter
+import org.gradle.api.Project
 import org.gradle.api.plugins.github.DraftReleaseTask
 import org.gradle.api.tasks.GradleBuild
 import org.gradle.initialization.GradleLauncherFactory
@@ -9,128 +10,144 @@ import org.gradle.util.ConfigureUtil
 
 import javax.inject.Inject
 
+
 class ReleaseTask extends GradleBuild {
-    public static final String GROUP_RELEASE = 'Github Release'
-    def String tagPrefix = "r"
-    def String releaseVersion
-    def String nextVersion
-    def boolean tagRelease = true
-    def boolean createGitHubRelease = true
-    def boolean pushChangeToGit = true
-    def Git git
-    UpdateSpec update = new UpdateSpec()
-    GithubReleaseSpec githubRelease = new GithubReleaseSpec()
-    DraftReleaseTask ghReleaseTask
-    String remote
+  public static final String GROUP_RELEASE = 'Github Release'
+  def String tagPrefix = "r"
+  def String releaseVersion
+  def String nextVersion
+  def boolean tagRelease = true
+  def boolean createGitHubRelease = true
+  def boolean pushChangeToGit = true
+  def boolean publishToGit = true
 
-    @Inject
-    ReleaseTask(StartParameter currentBuild, GradleLauncherFactory gradleLauncherFactory) {
-        super(currentBuild, gradleLauncherFactory)
-        group = GROUP_RELEASE
-        description = 'Verify project, release, and update version to next.'
-        ghReleaseTask = project.task('draftGhRelease', type: DraftReleaseTask)
+  def Git git
+  MavenRepoGit mavenRepoGit
+  UpdateSpec update = new UpdateSpec()
+  GithubReleaseSpec githubRelease = new GithubReleaseSpec()
+  DraftReleaseTask ghReleaseTask
+  String remote
 
-        tasks = [
-                'updateToReleaseVersion',
-                'pushToRemote',
-                'updateToNextVersion',
-        ]
+  @Inject
+  ReleaseTask(StartParameter currentBuild, GradleLauncherFactory gradleLauncherFactory) {
+    super(currentBuild, gradleLauncherFactory)
+    group = GROUP_RELEASE
+    description = 'Verify project, release, and update version to next.'
+    ghReleaseTask = project.task('draftGhRelease', type: DraftReleaseTask)
 
-        ghReleaseTask.releaseTask = this
+    tasks = [
+      'updateToReleaseVersion',
+      'pushToRemote',
+      'updateToNextVersion',
+    ]
 
-        git = Git.open(new File('.'))
-        remote = git.repository.config.getString('remote', 'origin', 'url')
+    ghReleaseTask.releaseTask = this
 
-        project.task('updateToReleaseVersion', group: 'release',
-                description: 'Updates version to release variant.') << this.&updateToReleaseVersion
+    git = Git.open(new File('.'))
+    remote = git.repository.config.getString('remote', 'origin', 'url')
 
-        project.task('pushToRemote', group: 'release',
-                description: 'Pushes changes to remote repository.') << this.&pushToRemote
+    mavenRepoGit = new MavenRepoGit(project, project, remote)
 
-        def updateToNextVersion = project.task('updateToNextVersion', group: 'release',
-                description: 'Updates version to next, using x.x.x+1 pattern.') << this.&updateToNextVersion
-        updateToNextVersion.dependsOn(ghReleaseTask)
+    project.task('updateToReleaseVersion', group: 'release',
+      description: 'Updates version to release variant.') << this.&updateToReleaseVersion
+
+    project.task('pushToRemote', group: 'release',
+      description: 'Pushes changes to remote repository.') << this.&pushToRemote
+
+    project.task('publishToGit', group: 'release',
+      description: 'Publishes Java build artifacts to Git') << this.&publishToGit
+
+    def updateToNextVersion = project.task('updateToNextVersion', group: 'release',
+      description: 'Updates version to next, using x.x.x+1 pattern.') << this.&updateToNextVersion
+
+    updateToNextVersion.dependsOn(ghReleaseTask)
+  }
+
+  def updateToReleaseVersion() {
+    updateVersions(project.version, releaseVersion)
+
+    git.commit()
+      .setMessage("Release $releaseVersion")
+      .call()
+
+    if (tagRelease) {
+      git.tag()
+        .setName(tagName())
+        .setMessage("Release ${releaseVersion}")
+        .call()
     }
+  }
 
-    def updateToReleaseVersion() {
-        updateVersions(project.version, releaseVersion)
+  def tagName() {
+    tagPrefix + releaseVersion
+  }
 
-        git.commit()
-                .setMessage("Release $releaseVersion")
-                .call()
+  def updateToNextVersion() {
+    updateVersions(releaseVersion, nextVersion)
 
-        if (tagRelease) {
-            git.tag()
-                    .setName(tagName())
-                    .setMessage("Release ${releaseVersion}")
-                    .call()
-        }
+    git.commit()
+      .setMessage("Update to next development version: ${nextVersion}")
+      .call()
+  }
+
+  def updateVersions(oldVersion, String newVersion) {
+    update.files.each {
+      project.ant.replaceregexp(file: it, match: oldVersion, replace: newVersion)
+      git.add()
+        .addFilepattern(it.path)
+        .call()
     }
+    update.projects*.version = newVersion
+  }
 
-    def tagName() {
-        tagPrefix + releaseVersion
+  def pushToRemote() {
+    if (pushChangeToGit) {
+      git.push()
+        .call()
     }
+  }
 
-    def updateToNextVersion() {
-        updateVersions(releaseVersion, nextVersion)
-
-        git.commit()
-                .setMessage("Update to next development version: ${nextVersion}")
-                .call()
+  def publishToGit() {
+    if (publishToGit) {
+      mavenRepoGit.publishToGit()
     }
+  }
 
-    def updateVersions(oldVersion, String newVersion) {
-        update.files.each {
-            project.ant.replaceregexp(file: it, match: oldVersion, replace: newVersion)
-            git.add()
-                    .addFilepattern(it.path)
-                    .call()
-        }
-        update.projects*.version = newVersion
-    }
+  void githubRelease(Closure closure) {
+    ConfigureUtil.configure(closure, this.githubRelease)
+  }
 
-    def pushToRemote() {
-        if (pushChangeToGit) {
-            git.push()
-                    .call()
-        }
-    }
+  void tagPrefix(value) {
+    tagPrefix = call(value)
+  }
 
-    void githubRelease(Closure closure) {
-        ConfigureUtil.configure(closure, this.githubRelease)
-    }
+  void version(final def block) {
+    this.releaseVersion = call(block) - '-SNAPSHOT'
+    nextVersion = update.bumpVersionRule(project, releaseVersion)
+  }
 
-    void tagPrefix(value) {
-        tagPrefix = call(value)
-    }
+  def pushChanges(boolean create) {
+    pushChangeToGit = create;
+  }
 
-    void version(final def block) {
-        this.releaseVersion = call(block) - '-SNAPSHOT'
-        nextVersion = update.bumpVersionRule(project, releaseVersion)
-    }
+  def createRelease(boolean create) {
+    createGitHubRelease = create;
+  }
 
-    def pushChanges(boolean create) {
-        pushChangeToGit = create;
-    }
-  
-    def createRelease(boolean create) {
-        createGitHubRelease = create;
-    }
+  def createTag(boolean create) {
+    tagRelease = create
+  }
 
-    def createTag(boolean create) {
-        tagRelease = create
-    }
-    
-    def bumpVersion(String old) {
+  def bumpVersion(String old) {
 
 
-    }
+  }
 
-    void update(Closure closure) {
-        ConfigureUtil.configure(closure, this.update)
-    }
+  void update(Closure closure) {
+    ConfigureUtil.configure(closure, this.update)
+  }
 
-    private static Object call(def c) {
-        c instanceof Closure ? c.call() : c
-    }
+  private static Object call(def c) {
+    c instanceof Closure ? c.call() : c
+  }
 }
