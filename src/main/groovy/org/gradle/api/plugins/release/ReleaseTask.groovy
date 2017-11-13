@@ -106,7 +106,7 @@ class ReleaseTask extends GradleBuild {
 
     void version(final def block) {
         this.releaseVersion = call(block) - '-SNAPSHOT'
-        nextVersion = bumpVersion(releaseVersion)
+        nextVersion = update.bumpVersionRule(project, releaseVersion)
     }
 
     def pushChanges(boolean create) {
@@ -122,14 +122,7 @@ class ReleaseTask extends GradleBuild {
     }
     
     def bumpVersion(String old) {
-        if (old != "unspecified") {
-            String[] split = old.split('\\.')
-            def next = (split.last() as int) + 1
 
-            def updated = split[0..-2].join('.')
-            updated += ".${next}-SNAPSHOT"
-            updated
-        }
 
     }
 
