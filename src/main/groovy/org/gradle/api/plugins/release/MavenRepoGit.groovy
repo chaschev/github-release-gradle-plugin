@@ -19,7 +19,8 @@ class MavenRepoGit {
     this.rootProject = rootProject
 
     repoPath = "$rootProject.buildDir/$rootProject.name-repo"
-    versionPath = "$repoPath/$project.group/$project.name/$project.version"
+
+    versionPath = "$repoPath/${project.group.toString().split("\\.").join('/')}/$project.name/$project.version"
 
     repoDir = new File(repoPath)
     versionDir = new File(versionPath)
@@ -27,7 +28,7 @@ class MavenRepoGit {
     git = new Git(repoDir, repoUrl)
 
     println("checking out repository branch...")
-    git.checkoutBranch("repository", false, true)
+    git.checkoutBranch("repository", null, false, true, true)
   }
 
   def publishToGit(){

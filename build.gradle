@@ -1,3 +1,5 @@
+import honey.vcs.git.Git
+
 apply plugin: 'groovy'
 apply plugin: 'idea'
 //apply plugin: 'com.bmuschko.nexus'
@@ -5,18 +7,23 @@ apply plugin: 'maven-publish'
 
 
 group = 'com.antwerkz.github'
-version = '1.2.0-SNAPSHOT'
+version = '1.2.0'
 
 buildscript {
+  ext.versions = [
+    'kgit'    : '0.0.5'
+  ]
+
   repositories {
     mavenCentral()
     jcenter()
     maven { url 'https://raw.github.com/chaschev/kgit/repository' }
+    maven { url 'http://dl.bintray.com/kotlin/kotlin-eap-1.2' }
   }
 
   dependencies {
 //    classpath 'com.bmuschko:gradle-nexus-plugin:2.3.1'
-    classpath "honey:kgit:0.0.3"
+    classpath "honey:kgit:${versions.kgit}"
   }
 }
 
@@ -24,6 +31,7 @@ repositories {
   mavenLocal()
   mavenCentral()
   maven { url 'https://raw.github.com/chaschev/kgit/repository' }
+  maven { url 'http://dl.bintray.com/kotlin/kotlin-eap-1.2' }
 }
 
 dependencies {
@@ -38,7 +46,7 @@ dependencies {
   }
 
   compile 'org.eclipse.jgit:org.eclipse.jgit:4.9.0.201710071750-r'
-  compile "honey:kgit:0.0.3"
+  compile "honey:kgit:${versions.kgit}"
 }
 
 task wrapper(type: Wrapper) {
@@ -54,21 +62,32 @@ publishing {
 
   repositories {
     maven {
-      url "$buildDir/$name-repository"
+      url "$buildDir/$project.name-repository"
     }
   }
 }
 
-def repoPath = "$buildDir/$name-repository"
-def versionPath = "$repoPath/$group/$name/$version"
+println("$project, $project.name")
+
+def repoPath = "$buildDir/$project.name-repository"
+def versionPath = "$repoPath/${group.split('\\.').join('/')}/$name/$version"
 
 def repoDir = new File(repoPath)
 def versionDir = new File(versionPath)
 
-publish.doLast{
-  def git = new honey.vcs.git.Git(repoDir, repoUrl)
+//publishToMavenLocal
+//publishMavenJavaPublicationToMavenRepository
 
-  git.checkoutBranch("repository", false, true)
+jar.doLast {
+  println("getting repo...")
+  def git = new Git(repoDir, "https://github.com/chaschev/github-release-gradle-plugin.git")
+
+  println("checking out repo branch...")
+  git.checkoutBranch("repository", null, false, true, true)
+}
+
+publish.doLast{
+  def git = new Git(repoDir, "https://github.com/chaschev/github-release-gradle-plugin.git")
 
   def addPath = versionPath.substring(repoPath.length() + 1)
 
